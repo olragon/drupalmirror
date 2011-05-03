@@ -7,7 +7,7 @@
 # 
 # requirements:
 #     git
-#        Ubuntu: sudo apt-get install git
+#        Ubuntu: sudo apt-get install gitosis
 #     
 # history:
 # 2011-05-03 fl   created
