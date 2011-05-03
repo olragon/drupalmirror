@@ -7,6 +7,8 @@
 #  
 # history:
 # 2011-05-03 fl   created
+#                 change file name main.py to drupalmirror.py
+#                 
 # 
 import os, sys, stat, urllib2, shlex, StringIO, subprocess 
 from xml.etree.ElementTree import parse, dump
