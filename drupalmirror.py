@@ -18,8 +18,8 @@ import os, sys, stat, urllib2, shlex, StringIO, subprocess
 from xml.etree.ElementTree import parse, dump
 
 REMOTE_DRUPAL_PROJECT_LIST = 'http://updates.drupal.org/release-history/project-list/all'
-LOCAL_DRUPAL_PROJECT_LIST = 'drupal-project-list-all.xml'
-PATH_TO_DRUPAL_PROJECT_DIRECTORY = 'repository'
+LOCAL_DRUPAL_PROJECT_LIST = os.getcwd() + 'drupal-project-list-all.xml'
+PATH_TO_DRUPAL_PROJECT_DIRECTORY =  os.getcwd() + 'repository'
 
 """
 Download xml file describe Drupal project list.
@@ -81,7 +81,7 @@ def download():
             if(r_buffer != l_buffer):
                 l_file.seek(block_sz, block_sz - 8192)
                 l_file.write(r_buffer)
-                print "Path file at block " + str(file_size_dl)
+                print "Patch file at block " + str(file_size_dl)
             else:
                 print "File block " + str(file_size_dl) + " match. Move to next block ..."
                 continue
