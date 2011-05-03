@@ -4,7 +4,11 @@
 # $Id$;
 #
 # Clone drupal project repository
-#  
+# 
+# requirements:
+#     git
+#        Ubuntu: sudo apt-get install git
+#     
 # history:
 # 2011-05-03 fl   created
 #                 change file name main.py to drupalmirror.py
