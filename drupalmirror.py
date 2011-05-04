@@ -14,12 +14,12 @@
 #                 change file name main.py to drupalmirror.py
 #                 
 # 
-import os, sys, stat, urllib2, shlex, StringIO, subprocess 
+import os, sys, stat, urllib2, shlex, StringIO, subprocess, re
 from xml.etree.ElementTree import parse, dump
 
 REMOTE_DRUPAL_PROJECT_LIST = 'http://updates.drupal.org/release-history/project-list/all'
-LOCAL_DRUPAL_PROJECT_LIST = os.getcwd() + 'drupal-project-list-all.xml'
-PATH_TO_DRUPAL_PROJECT_DIRECTORY =  os.getcwd() + 'repository'
+LOCAL_DRUPAL_PROJECT_LIST = os.path.dirname( os.path.realpath( __file__ ) ) + '/drupal-project-list-all.xml'
+PATH_TO_DRUPAL_PROJECT_DIRECTORY =  os.path.dirname( os.path.realpath( __file__ ) ) + '/repository'
 
 """
 Download xml file describe Drupal project list.
@@ -70,9 +70,15 @@ def download():
         block_sz = 8192
         
         while True:
+            # Read inside content of file
             r_buffer = r.read(block_sz)
             l_buffer = l_file.read(block_sz)
             
+            # Find the valid block size
+            block_sz = xml_validate(r_buffer, l_buffer)
+            print "Block size that match your need is: " + block_sz
+            
+            # If remote buffer empty, file is complete downloaded.
             if not r_buffer:
                 break
             
@@ -90,6 +96,16 @@ def download():
         
     else:
         print 'Same size! No need to update project list file.'
+
+def xml_validate(xml1 = None, xml2 = None, block_sz = 1024):
+    # Ensure this block is contain valid xml
+    match1 = re.match('</project>\Z', xml1, re.I)
+    match2 = re.match('</project>\Z', xml2, re.I)
+    
+    if match1 and match2:
+        return block_sz
+    else:
+        xml_validate(xml1, xml2, block_sz + 1024)
 
 def chunk_report(bytes_so_far, chunk_size, total_size):
    percent = float(bytes_so_far) / total_size
@@ -142,7 +158,7 @@ def project_checkout(to_path = None):
         
         if(os.path.exists(path)):
             args = shlex.split(git_fetch_command)
-            print "Fetching project: " + title
+            print "Fetching project: " + repr(title)
             #print git_fetch_command
             p = subprocess.Popen(args, cwd=path, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             stdout_value = p.communicate('through stdin to stdout')[0]
@@ -151,7 +167,7 @@ def project_checkout(to_path = None):
             #if(p.wait() != None): continue
         else:
             args = shlex.split(git_clone_command)
-            print "Cloning project: " + title
+            print "Cloning project: " + repr(title)
             #print git_clone_command
             p = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             stdout_value = p.communicate('through stdin to stdout')[0]
