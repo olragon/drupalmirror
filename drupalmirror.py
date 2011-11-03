@@ -10,16 +10,23 @@
 #        Ubuntu: sudo apt-get install gitosis
 #     
 # history:
-# 2011-05-03 fl   created
+# 2011-05-03      created
 #                 change file name main.py to drupalmirror.py
-#                 
 # 
+# 2011-10-03      remove code continue download xml, validate xml
+#                 add function export to gitweb
 import os, sys, stat, urllib2, shlex, StringIO, subprocess, re
 from xml.etree.ElementTree import parse, dump
 
+"""
+Note: All local path must have trailing slash
+"""
+# settings
 REMOTE_DRUPAL_PROJECT_LIST = 'http://updates.drupal.org/release-history/project-list/all'
 LOCAL_DRUPAL_PROJECT_LIST = os.path.dirname( os.path.realpath( __file__ ) ) + '/drupal-project-list-all.xml'
-PATH_TO_DRUPAL_PROJECT_DIRECTORY =  os.path.dirname( os.path.realpath( __file__ ) ) + '/repository'
+PATH_TO_DRUPAL_PROJECT_DIRECTORY =  '/data/mirror/drupal.org/'
+# gitweb export
+GITWEB_ROOT_PATH = '/tmp/'
 
 """
 Download xml file describe Drupal project list.
@@ -32,10 +39,14 @@ def download():
     r_size = r.info().get('Content-Length')
     print 'Remote drupal project list file size is: ' + r_size
     # Get local drupal project file size
-    l_size = os.stat(LOCAL_DRUPAL_PROJECT_LIST)[stat.ST_SIZE]
-    print "Local drupal project list file size is: " + str(l_size)
-    
-    if int(l_size) == 0:
+    if os.path.exists(LOCAL_DRUPAL_PROJECT_LIST):
+    	l_size = os.stat(LOCAL_DRUPAL_PROJECT_LIST)[stat.ST_SIZE]
+    	print "Local drupal project list file size is: " + str(l_size)
+    else:
+	l_size = 0
+	print "Local file not existed"    
+
+    if int(l_size) == 0 or int(l_size) != int(r_size) or int(r_size) > int(l_size):
         print "Downloading: %s Bytes: %s" % (LOCAL_DRUPAL_PROJECT_LIST, r_size)
         f = open(LOCAL_DRUPAL_PROJECT_LIST, 'w')
         file_size_dl = 0
@@ -52,60 +63,9 @@ def download():
             print status,
         
         f.close()
-        
-    elif int(l_size) != int(r_size) and int(r_size) > int(l_size):
-        """
-        Để tránh việc ghi toàn bộ
-        
-        1. Đọc block remote file (r) theo từng block 8192 bytes
-        2. So sánh với từng block file local (l) tương ứng
-        3. Kiểm tra:
-            r = l: bỏ qua và kiểm tra block tiếp theo.
-            r != l: ghi block r xuống l
-        """
-        print 'Miss match file size. Begin update local drupal project list file.'
-        
-        l_file = open(LOCAL_DRUPAL_PROJECT_LIST, 'rwab+')
-        file_size_dl = 0
-        block_sz = 8192
-        
-        while True:
-            # Read inside content of file
-            r_buffer = r.read(block_sz)
-            l_buffer = l_file.read(block_sz)
-            
-            # Find the valid block size
-            block_sz = xml_validate(r_buffer, l_buffer)
-            print "Block size that match your need is: " + block_sz
-            
-            # If remote buffer empty, file is complete downloaded.
-            if not r_buffer:
-                break
-            
-            file_size_dl += block_sz
-            
-            if(r_buffer != l_buffer):
-                l_file.seek(block_sz, block_sz - 8192)
-                l_file.write(r_buffer)
-                print "Patch file at block " + str(file_size_dl)
-            else:
-                print "File block " + str(file_size_dl) + " match. Move to next block ..."
-                continue
-            
-        l_file.close()
-        
+
     else:
         print 'Same size! No need to update project list file.'
-
-def xml_validate(xml1 = None, xml2 = None, block_sz = 1024):
-    # Ensure this block is contain valid xml
-    match1 = re.match('</project>\Z', xml1, re.I)
-    match2 = re.match('</project>\Z', xml2, re.I)
-    
-    if match1 and match2:
-        return block_sz
-    else:
-        xml_validate(xml1, xml2, block_sz + 1024)
 
 def chunk_report(bytes_so_far, chunk_size, total_size):
    percent = float(bytes_so_far) / total_size
@@ -151,7 +111,7 @@ def project_checkout(to_path = None):
         short_name = element.findtext('short_name')
         title = element.findtext('title')
         
-        path = os.getcwd() + '/' + to_path + '/' + short_name
+        path = os.getcwd() + to_path + short_name
         
         git_clone_command = "/usr/bin/env git clone http://git.drupal.org/project/" + short_name + ".git " + path
         git_fetch_command = "/usr/bin/env git fetch --all"
@@ -174,10 +134,21 @@ def project_checkout(to_path = None):
             print '\tpass through:', repr(stdout_value)
             p.wait()
             #if(p.wait() != None): continue
-        
+	      
+        if GITWEB_ROOT_PATH:
+	        # create symlink
+	        sl_des = GITWEB_ROOT_PATH + short_name + '.git'
+	        sl_src = path + '/.git'
+	        if not os.path.exists(sl_des):
+	            os.symlink(sl_src, sl_des)
+	        # modify description
+	        f = open(sl_src + '/description', 'w')
+	        f.write(title)
+	        f.close()
+	      
         status = r"%10d  [%3.2f%%]" % (n_projects_loaded, n_projects_loaded * 100. / int(n_projects))
         status = status + chr(8) * (len(status) + 1) + '\r\n'
-        print status,
+        print status
         
         n_projects_loaded += 1
 
