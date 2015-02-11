@@ -1,14 +1,22 @@
-# How to setup
-- Linux (tested with Ubuntu 10.04, 10.10)
-- Git
 
-# Config
-- Change those variables to match your need.
-  - REMOTE_DRUPAL_PROJECT_LIST
-  - LOCAL_DRUPAL_PROJECT_LIST 
-  - PATH_TO_DRUPAL_PROJECT_DIRECTORY
+# DrupalMirror
 
-# How to use?
-- `python drupalmirror.py`
-- or
-- `drupalmirror.py`
+A simple tools to mirror Drupal modules.
+It skips all sandbox projects and by default download
+only modules. It can also download selectively, 
+themes, distributions, etc.
+
+### Dependencies
+
+Needs python and git.
+
+### How to use?
+    drupal module mirror
+
+    positional arguments:
+      targetdir             target directory
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      --type TYPE           Download only this project type (default module)
+
