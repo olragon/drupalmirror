@@ -15,19 +15,18 @@
 # 
 # 2011-10-03      remove code continue download xml, validate xml
 #                 add function export to gitweb
-import os, sys, stat, urllib2, shlex, StringIO, subprocess, re
-from xml.etree.ElementTree import parse, dump
-import argparse
 
-REMOTE_DRUPAL_PROJECT_LIST = 'http://updates.drupal.org/release-history/project-list/all'
+import os, sys, stat, urllib2, shlex, StringIO, subprocess, re
+import xml.etree.ElementTree as etree
+import argparse
 
 """
 Download xml file describe Drupal project list.
 @todo: check if remote file is modified then download.
 """
-def download(pl) :
+def download(pl,url,verbose=False) :
     # Connect to drupal project list url
-    r = urllib2.urlopen(REMOTE_DRUPAL_PROJECT_LIST)
+    r = urllib2.urlopen(url)
     # Get remote drupal project file size
     r_size = r.info().get('Content-Length')
     print 'Remote drupal project list file size is: ' + r_size
@@ -51,47 +50,23 @@ def download(pl) :
         
             file_size_dl += block_sz
             f.write(buffer)
-            status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / int(r_size))
-            status = status + chr(8) * (len(status) + 1) + '\r\n'
-            print status
+            if verbose : 
+                status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / int(r_size))
+                status = status + chr(8) * (len(status) + 1) + '\r\n'
+                print status
         
         f.close()
     else :
         print 'Same size! No need to update project list file.'
 
-def chunk_report(bytes_so_far, chunk_size, total_size) :
-   percent = float(bytes_so_far) / total_size
-   percent = round(percent*100, 2)
-   sys.stdout.write("Downloaded %d of %d bytes (%0.2f%%)\r" % 
-       (bytes_so_far, total_size, percent))
-
-   if bytes_so_far >= total_size :
-      sys.stdout.write('\n')
-
-def chunk_read(response, chunk_size=8192, report_hook=None) :
-   total_size = response.info().getheader('Content-Length').strip()
-   total_size = int(total_size)
-   bytes_so_far = 0
-
-   while True :
-      result = StringIO.StringIO()
-      chunk = response.read(chunk_size)
-      bytes_so_far += len(chunk)
-
-      if not chunk :
-         break
-
-      if report_hook :
-         report_hook(bytes_so_far, chunk_size, total_size)
-      
-      result.write(chunk)
-   return result
-
-def project_checkout(pl,to_path,ptype,noop=False) :
+def project_checkout(pl,to_path,ptype,noop=False,nofetch=False,verbose=False) :
     if not os.path.exists(to_path):
         os.makedirs(to_path)
-
-    elements = parse(open(pl, 'r')).findall('/project')
+        
+    with open(pl, 'r') as xml_file:
+        parser = etree.XMLParser(encoding='utf-8')
+        xml_tree = etree.parse(xml_file)
+        elements = xml_tree.findall('./project')
     
     n_projects = len(elements)
     n_projects_loaded = 0
@@ -106,10 +81,12 @@ def project_checkout(pl,to_path,ptype,noop=False) :
         # skip all sandbox projects
 
         if rex.match(short_name) is not None :
-            print "Skip sandbox Project %s" % short_name
+            n_projects_loaded += 1
+            if verbose : print "Skip sandbox Project %s" % short_name
             continue
         if (project_type != ('project_%s' % ptype)) :
-            print "Skip Project %s (%s)" % (short_name, project_type)
+            n_projects_loaded += 1
+            if verbose : print "Skip Project %s (%s)" % (short_name, project_type)
             continue
 
         title = element.findtext('title')
@@ -118,18 +95,22 @@ def project_checkout(pl,to_path,ptype,noop=False) :
         git_clone_command = "/usr/bin/env git clone git://git.drupal.org/project/" + short_name + ".git " + path
         git_fetch_command = "/usr/bin/env git fetch --all"
         
-        if (os.path.exists(path)) :
+        if nofetch and (os.path.exists(path)) :
+            n_projects_loaded += 1
+            if verbose : print "Skip Fetching project: %s" % title
+            continue
+        if not nofetch and (os.path.exists(path)) :
             args = shlex.split(git_fetch_command)
-            print "Fetching project: %s" % title
+            if verbose : print "Fetching project: %s" % title 
             #print git_fetch_command
             p = subprocess.Popen(args, cwd=path, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             stdout_value = p.communicate('through stdin to stdout')[0]
             print '\tpass through: %s' % stdout_value
             p.wait()
-            #if(p.wait() != None): continue
+           #if(p.wait() != None): continue
         else :
             args = shlex.split(git_clone_command)
-            print "Cloning project: %s" % title
+            if verbose : print "Cloning project: %s" % title
             #print git_clone_command
             p = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             stdout_value = p.communicate('through stdin to stdout')[0]
@@ -148,17 +129,18 @@ def project_checkout(pl,to_path,ptype,noop=False) :
 #                    f = open(sl_src + '/description', 'w')
 #                    f.write(title)
 #                    f.close()
-              
-            status = r"%10d  [%3.2f%%]" % (n_projects_loaded, n_projects_loaded * 100. / int(n_projects))
-            status = status + chr(8) * (len(status) + 1) + '\r\n'
-            print status
+
+        status = r"%10d  [%3.2f%%]" % (n_projects_loaded, n_projects_loaded * 100. / int(n_projects))
+        status = status + chr(8) * (len(status) + 1) + '\r\n'
+        print status
         
         n_projects_loaded += 1
 
 def main() :
     parser = argparse.ArgumentParser(description='drupal module mirror')
-    parser.add_argument('-v', '--verbose')
-    parser.add_argument('--noop', help="Do not download anything", default=False)
+    parser.add_argument('-v', '--verbose', action='store_true', help="Print debus information", default=False)
+    parser.add_argument('--noop', action='store_true', help="Do not download anything", default=False)
+    parser.add_argument('--nofetch', action='store_true', help="Only clone new projects", default=False)
     parser.add_argument('--type', type=str, help="Download only this project type (default module)", default="module")
     parser.add_argument('targetdir', type=str, nargs=1, help="target directory")
     args = parser.parse_args()
@@ -168,12 +150,16 @@ def main() :
     if not os.path.exists(targetdir):
         os.makedirs(targetdir)
 
-    project_list = os.path.join(targetdir,'drupal-project-list-all.xml')
+    listurl = 'http://updates.drupal.org/release-history/project-list/all'
+    project_list = os.path.join('/tmp','drupal-project-list-all.xml')
+#    if args.ptype == 'drupal' :
+#        listurl = 'http://updates.drupal.org/release-history/drupal/all'
+#        project_list = os.path.join('/tmp','drupal-core-list-all.xml')
 
     if not args.noop : 
-        download(project_list)
+        download(project_list,listurl,args.verbose)
 
-    project_checkout(project_list,targetdir,args.type,args.noop)
+    project_checkout(project_list,targetdir,args.type,args.noop,args.nofetch,args.verbose)
 
 if __name__ == '__main__':
     main()
